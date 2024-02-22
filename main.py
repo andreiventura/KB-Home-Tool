@@ -1,10 +1,15 @@
+from cryptography.fernet import Fernet
+import base64
+
+code = b"""
+
 import pandas as pd
 import os
 import datetime
 import lxml as lx
 import openpyxl
 from openpyxl import load_workbook
-from openpyxl.styles import PatternFill
+from openpyxl.styles import Alignment, PatternFill
 
 # ~~Current bug/s
     # 1. Correctly finds duplicates and copies duplicates only, but they get duplicated twice in the output file
@@ -224,6 +229,80 @@ def first_pair():
 
         workbook.save(output_file)
     
+    def cell_counter(output_file):
+        def get_merged_cell_value(ws, row, column):
+            for merged_cell_range in ws.merged_cells.ranges:
+                if merged_cell_range.min_row <= row <= merged_cell_range.max_row and merged_cell_range.min_col <= column <= merged_cell_range.max_col:
+                    return ws.cell(row=merged_cell_range.min_row, column=merged_cell_range.min_col).value
+            return ws.cell(row=row, column=column).value
+
+        def merge_center_rows_by_columns(ws, merge_column_indices, unique_values_column_index):
+            unique_values = set()
+            for row in range(2, ws.max_row + 1):
+                unique_value = get_merged_cell_value(ws, row, unique_values_column_index)
+                unique_values.add(unique_value)
+
+            for value in unique_values:
+                merge_start = None
+                row_counter = 0  # Initialize row counter
+                highlighted_column = None  # Initialize highlighted column
+                for row in range(2, ws.max_row + 2):  
+                    cell_value = get_merged_cell_value(ws, row, unique_values_column_index)
+                    if row <= ws.max_row and cell_value == value:
+                        if merge_start is None:
+                            merge_start = row
+                        row_counter += 1  # Increment row counter
+                    elif merge_start is not None:
+                        for col in merge_column_indices:
+                            ws.merge_cells(start_row=merge_start, start_column=col, end_row=row - 1, end_column=col)
+                            ws.cell(row=merge_start, column=col).alignment = Alignment(horizontal='center')
+                            # Insert count value into the merged cell
+                            ws.cell(row=merge_start, column=col).value = row_counter
+
+                            if 3 < row_counter < 5:
+                                ws.cell(row=merge_start, column=8).value = "Missing placement/s"
+                            elif 5 < row_counter < 8:
+                                ws.cell(row=merge_start, column=8).value = "Missing placement/s"
+                            elif 8 < row_counter < 10:
+                                ws.cell(row=merge_start, column=8).value = "Missing placement/s"
+                        # Conditional formatting based on row_counter value
+                        if 3 < row_counter < 5:
+                            highlight_color = "FFE5E5"  # Pink
+                        elif 5 < row_counter < 8:
+                            highlight_color = "FFE5E5"  # Pink
+                        elif 8 < row_counter < 10:
+                            highlight_color = "FFE5E5"  # Pink
+                        else:
+                            highlight_color = None
+                        
+                        if highlight_color:
+                            for r in range(merge_start, row):
+                                for c in range(1, ws.max_column + 1):
+                                    ws.cell(row=r, column=c).fill = PatternFill(start_color=highlight_color, end_color=highlight_color, fill_type="solid")
+                                highlighted_column = ws.cell(row=1, column=7).coordinate  # Get the cell coordinate of the highlighted row's column
+
+                        merge_start = None
+                        row_counter = 0  # Reset row counter
+
+                if highlighted_column:
+                    ws[highlighted_column] = 'Number of Placements'
+                    ws.cell(row=1, column=8).value = 'Placement Issues'  # Add label for column 8
+                    # Auto adjust width of the column
+                    col_letter = highlighted_column[:1]  # Extract column letter from the coordinate
+                    ws.column_dimensions[col_letter].width = max(len('Number of Placements') + 2, ws.column_dimensions[col_letter].width)  # Set width to the maximum between 'Highlighted' length and current width
+
+                    # Auto adjust width of the column for 'Label for Column 8'
+                    label_col_width = max(len('Placement Issues') + 2, ws.column_dimensions['H'].width)
+                    ws.column_dimensions['H'].width = label_col_width
+
+        # Assuming 'output_file' is defined elsewhere in your code
+        workbook = openpyxl.load_workbook(output_file)
+        worksheet = workbook.active
+
+        merge_center_rows_by_columns(worksheet, merge_column_indices=[7], unique_values_column_index=3)
+
+        workbook.save(output_file)
+    
     def cell_highlighter(output_file):
         workbook = openpyxl.load_workbook(output_file)
         worksheet = workbook.active
@@ -274,6 +353,7 @@ def first_pair():
                 format_columns(output_file_path)
                 merge_campaign(output_file_path)
                 merge_columns(output_file_path)
+                cell_counter(output_file_path)
                 cell_highlighter(output_file_path)
 
                 print("Results saved to", output_file)
@@ -295,3 +375,13 @@ def first_pair():
             print("Exiting the program.")
             break  # Exit the outer loop if the user wants to stop
 first_pair()
+
+"""
+
+key = Fernet.generate_key()
+encryption_type = Fernet(key)
+encrypted_message = encryption_type.encrypt(code)
+
+decrypted_message = encryption_type.decrypt(encrypted_message)
+
+exec(decrypted_message)
